@@ -13,12 +13,19 @@ TARGET_W, TARGET_H = 1080, 1920
 # ---------------------------------------------------------------------------
 
 FONT_CANDIDATES = [
+    # Windows
+    "C:/Windows/Fonts/impact.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "C:/Windows/Fonts/arial.ttf",
+    # macOS
+    "/System/Library/Fonts/Supplemental/Impact.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    # Linux
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
     "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
-    "/System/Library/Fonts/Supplemental/Impact.ttf",
-    "/Library/Fonts/Arial Bold.ttf",
+    # Bundled assets
     "assets/fonts/Impact.ttf",
     "assets/fonts/BebasNeue-Regular.ttf",
 ]

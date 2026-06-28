@@ -1,4 +1,4 @@
-"""Hoofd orkestratie pipeline voor football shorts zonder externe AI API."""
+"""Hoofd pipeline voor football shorts — directe ffmpeg verwerking, geen MoviePy."""
 
 import time
 from pathlib import Path
@@ -7,10 +7,12 @@ from typing import Optional
 import yaml
 
 from .downloader import download_clips, load_urls_from_file
-from .video_editor import (
-    build_clip,
-    combine_and_export,
-    extract_thumbnail_frame,
+from .processor import (
+    TARGET_W, TARGET_H,
+    make_intro_video,
+    process_clip,
+    concat_and_export,
+    extract_frame,
 )
 from .overlays import make_thumbnail
 
@@ -36,184 +38,145 @@ class FootballShortsGenerator:
         self.output_dir = output_dir or Path(self.config["output"]["output_dir"])
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    # ------------------------------------------------------------------
-    # Hoofd pipeline
-    # ------------------------------------------------------------------
-
     def generate_short(
         self,
-        sources: list[str],                 # lokale paden OF YouTube-URLs
-        template: str = "goal_celebration",
+        sources: list[str],
+        template: str = "skill_move",
         player_name: str = "",
         club: str = "",
         title: str = "",
         music_path: Optional[Path] = None,
         add_thumbnail: bool = True,
-        # Wedstrijd score (alleen bij match_highlights)
         team_a: str = "",
         score_a: int = 0,
         score_b: int = 0,
         team_b: str = "",
     ) -> Path:
-        """Genereer één football short van de opgegeven bronnen."""
-
         tmpl_cfg = self.config["templates"].get(template)
         if not tmpl_cfg:
-            raise ValueError(
-                f"Onbekend template '{template}'. "
-                f"Kies uit: {list(self.config['templates'].keys())}"
-            )
+            raise ValueError(f"Onbekend template '{template}'.")
 
-        used_title = title or tmpl_cfg.get("title", "FOOTBALL! ⚽")
-        channel = self.config["branding"]["channel_name"]
-        timestamp = int(time.time())
+        used_title = title or tmpl_cfg.get("title", "FOOTBALL!")
+        channel    = self.config["branding"]["channel_name"]
+        accent     = self.config["text"]["accent_color"]
+        primary    = self.config["text"]["primary_color"]
+        timestamp  = int(time.time())
+
         job_dir = self.output_dir / f"{template}_{timestamp}"
         job_dir.mkdir(parents=True, exist_ok=True)
 
-        _log(f"Template: {template} — {tmpl_cfg['label']}")
-        _log(f"Bronnen: {len(sources)} clip(s)  |  Speler: {player_name or '—'}" + (f"  |  Club: {club}" if club else ""))
+        _log(f"Template : {template} — {tmpl_cfg['label']}")
+        _log(f"Bronnen  : {len(sources)} clip(s)" + (f"  |  Speler: {player_name}" if player_name else ""))
 
-        # ── Stap 1: clips verzamelen ──────────────────────────────────
+        # ── Stap 1: clips downloaden ──────────────────────────────────
         _log("Stap 1: Clips downloaden...")
         video_paths = self._collect_clips(sources, job_dir)
         if not video_paths:
             raise RuntimeError(
-                "Geen bruikbare clips gevonden. Controleer of de YouTube-link klopt "
+                "Download mislukt. Controleer of de YouTube-link klopt "
                 "en of de video publiek beschikbaar is."
             )
         _log(f"  ✓ {len(video_paths)} clip(s) gedownload")
 
-        # ── Stap 2: clips bewerken ────────────────────────────────────
-        _log("Stap 2: Effecten en overlays toepassen...")
-        edited = []
-        for i, path in enumerate(video_paths):
-            _log(f"  Bewerken [{i + 1}/{len(video_paths)}]: {path.name}")
-            is_last = i == len(video_paths) - 1
+        # ── Stap 2: clips verwerken ───────────────────────────────────
+        _log("Stap 2: Clips verwerken (9:16 formaat + overlays)...")
+        processed: list[Path] = []
+        for i, raw in enumerate(video_paths):
+            out = job_dir / f"clip_{i:02d}.mp4"
+            is_last = (i == len(video_paths) - 1)
+            _log(f"  [{i+1}/{len(video_paths)}] {raw.name}")
             try:
-                clip = build_clip(
-                    video_path=path,
-                    template_cfg=tmpl_cfg,
-                    global_cfg=self.config,
+                process_clip(
+                    input_path=raw,
+                    output_path=out,
+                    trim_sec=float(tmpl_cfg.get("clip_trim", 8)),
+                    slow_motion=tmpl_cfg.get("slow_motion", False),
                     player_name=player_name,
                     club=club,
                     channel_name=channel,
                     show_title=is_last,
                     title=used_title,
                     subtitle=f"{player_name} | {club}" if player_name and club else player_name,
-                    show_score=(template == "match_highlights"),
-                    team_a=team_a,
-                    score_a=score_a,
-                    score_b=score_b,
-                    team_b=team_b,
+                    accent=accent,
+                    primary=primary,
                 )
-                edited.append(clip)
+                processed.append(out)
+                _log(f"  ✓ Clip {i+1} klaar")
             except Exception as exc:
                 import traceback
-                _log(f"  ✗ Clip {i + 1} mislukt: {exc}")
+                _log(f"  ✗ Clip {i+1} mislukt: {exc}")
                 _log(traceback.format_exc())
 
-        if not edited:
-            raise RuntimeError("Geen clips konden worden bewerkt — zie log hierboven voor details.")
+        if not processed:
+            raise RuntimeError("Geen clips konden worden verwerkt.")
 
-        # ── Stap 3: samenvoegen en exporteren ─────────────────────────
-        _log("Stap 3: Clips samenvoegen en exporteren...")
+        # ── Stap 3: intro maken ───────────────────────────────────────
+        _log("Stap 3: Samenvoegen...")
+        intro_path = job_dir / "intro.mp4"
+        try:
+            make_intro_video(channel, intro_path, duration=1.5)
+        except Exception as exc:
+            _log(f"  ⚠ Intro overgeslagen: {exc}")
+            intro_path = None
+
+        # ── Stap 4: concat + export ───────────────────────────────────
         slug = (player_name or "short").replace(" ", "_")
-        out_name = f"{template}_{slug}_{timestamp}.mp4"
-        output_path = self.output_dir / out_name
+        output_path = self.output_dir / f"{template}_{slug}_{timestamp}.mp4"
 
-        combine_and_export(
-            clips=edited,
+        concat_and_export(
+            clip_paths=processed,
             output_path=output_path,
-            audio_path=music_path,
-            music_volume=tmpl_cfg.get("music_volume", 0.20),
+            intro_path=intro_path if (intro_path and intro_path.exists()) else None,
             max_duration=self.config["output"]["max_duration"],
-            fps=self.config["output"]["fps"],
-            crf=self.config["output"]["crf"],
-            fade_duration=self.config["effects"]["fade_duration"],
-            include_intro=True,
-            channel_name=channel,
+            music_path=music_path,
+            music_volume=tmpl_cfg.get("music_volume", 0.20),
         )
 
-        for c in edited:
-            try:
-                c.close()
-            except Exception:
-                pass
-
-        # ── Stap 4: thumbnail ─────────────────────────────────────────
+        # ── Stap 5: thumbnail ─────────────────────────────────────────
         if add_thumbnail:
             _log("Stap 4: Thumbnail maken...")
             thumb_path = output_path.with_suffix(".jpg")
             try:
-                frame = extract_thumbnail_frame(output_path, t=2.0)
-                make_thumbnail(
-                    frame,
-                    title=used_title,
-                    output_path=thumb_path,
-                    accent=self.config["text"]["accent_color"],
-                )
-                _log(f"  ✓ Thumbnail: {thumb_path.name}")
+                frame = extract_frame(output_path, t=2.0)
+                make_thumbnail(frame, title=used_title, output_path=thumb_path, accent=accent)
+                _log(f"  ✓ Thumbnail opgeslagen")
             except Exception as exc:
                 _log(f"  ⚠ Thumbnail mislukt: {exc}")
 
-        _log(f"✓ Short klaar! {output_path.name} (1080×1920, max {self.config['output']['max_duration']}s)")
+        _log(f"✓ Short klaar! {output_path.name}")
         return output_path
 
-    # ------------------------------------------------------------------
-    # Batch
-    # ------------------------------------------------------------------
+    def _collect_clips(self, sources: list[str], job_dir: Path) -> list[Path]:
+        local: list[Path] = []
+        urls:  list[str]  = []
+        for src in sources:
+            p = Path(src)
+            if p.exists() and p.suffix.lower() in {".mp4", ".mov", ".webm", ".mkv", ".avi"}:
+                local.append(p)
+            else:
+                urls.append(src)
+        downloaded: list[Path] = []
+        if urls:
+            downloaded = download_clips(urls=urls, dest_dir=job_dir / "downloads")
+        return local + downloaded
 
     def batch_from_file(
         self,
         urls_file: Path,
         clips_per_short: int = 3,
-        template: str = "goal_celebration",
+        template: str = "skill_move",
         music_path: Optional[Path] = None,
         **kwargs,
     ) -> list[Path]:
-        """Verdeel een URL-bestand in batches en maak per batch een short."""
         all_urls = load_urls_from_file(urls_file)
         results = []
         for i in range(0, len(all_urls), clips_per_short):
             batch = all_urls[i:i + clips_per_short]
             _log(f"\n=== Short {i // clips_per_short + 1} ===")
             try:
-                path = self.generate_short(
-                    sources=batch,
-                    template=template,
-                    music_path=music_path,
-                    **kwargs,
-                )
-                results.append(path)
+                results.append(self.generate_short(
+                    sources=batch, template=template, music_path=music_path, **kwargs
+                ))
             except Exception as exc:
                 _log(f"Short mislukt: {exc}")
         return results
-
-    # ------------------------------------------------------------------
-    # Intern: clips verzamelen
-    # ------------------------------------------------------------------
-
-    def _collect_clips(self, sources: list[str], job_dir: Path) -> list[Path]:
-        """Splits bronnen in lokale bestanden en URLs, download URLs."""
-        local_paths: list[Path] = []
-        urls: list[str] = []
-
-        for src in sources:
-            p = Path(src)
-            if p.exists() and p.suffix.lower() in {".mp4", ".mov", ".webm", ".mkv", ".avi"}:
-                local_paths.append(p)
-            else:
-                urls.append(src)
-
-        downloaded: list[Path] = []
-        if urls:
-            dl_cfg = self.config["download"]
-            downloaded = download_clips(
-                urls=urls,
-                dest_dir=job_dir / "downloads",
-                quality=dl_cfg["quality"],
-                merge_format=dl_cfg["merge_format"],
-                max_duration=dl_cfg["max_clip_duration"],
-            )
-
-        return local_paths + downloaded

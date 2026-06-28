@@ -1,7 +1,6 @@
 flask>=3.0.0
 python-telegram-bot>=21.0
 yt-dlp>=2024.1.0
-moviepy==1.0.3
 Pillow>=10.0.0
 numpy>=1.24.0
 imageio>=2.33.0

@@ -81,7 +81,7 @@ echo.
 :: ── Stap 2: Packages installeren ──────────────────────────────────────────
 echo  [*] Benodigde onderdelen installeren (eenmalig, ~2 min)...
 %PYTHON_CMD% -m pip install --upgrade pip --quiet --no-warn-script-location
-%PYTHON_CMD% -m pip install flask yt-dlp "moviepy==1.0.3" Pillow numpy imageio imageio-ffmpeg python-dotenv pyyaml --quiet --no-warn-script-location
+%PYTHON_CMD% -m pip install flask yt-dlp Pillow numpy imageio imageio-ffmpeg python-dotenv pyyaml --quiet --no-warn-script-location
 
 if errorlevel 1 (
     echo.
