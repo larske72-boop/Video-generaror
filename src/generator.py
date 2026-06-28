@@ -5,8 +5,6 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from rich.console import Console
-from rich.panel import Panel
 
 from .downloader import download_clips, load_urls_from_file
 from .video_editor import (
@@ -16,8 +14,11 @@ from .video_editor import (
 )
 from .overlays import make_thumbnail
 
-console = Console()
 DEFAULT_CONFIG = Path(__file__).parent.parent / "config.yaml"
+
+
+def _log(msg: str) -> None:
+    print(msg, flush=True)
 
 
 def load_config(config_path: Optional[Path] = None) -> dict:
@@ -69,27 +70,24 @@ class FootballShortsGenerator:
         job_dir = self.output_dir / f"{template}_{timestamp}"
         job_dir.mkdir(parents=True, exist_ok=True)
 
-        console.print(Panel(
-            f"[bold yellow]Football Shorts Generator[/bold yellow]\n"
-            f"Template : [cyan]{template}[/cyan] — {tmpl_cfg['label']}\n"
-            f"Bronnen  : [cyan]{len(sources)}[/cyan] clip(s)\n"
-            f"Speler   : [cyan]{player_name or '—'}[/cyan]"
-            + (f"  |  Club : [cyan]{club}[/cyan]" if club else ""),
-            border_style="yellow",
-        ))
+        _log(f"Template: {template} — {tmpl_cfg['label']}")
+        _log(f"Bronnen: {len(sources)} clip(s)  |  Speler: {player_name or '—'}" + (f"  |  Club: {club}" if club else ""))
 
         # ── Stap 1: clips verzamelen ──────────────────────────────────
-        console.print("\n[bold]Stap 1:[/bold] Clips verzamelen...")
+        _log("Stap 1: Clips downloaden...")
         video_paths = self._collect_clips(sources, job_dir)
         if not video_paths:
-            raise RuntimeError("Geen bruikbare clips gevonden.")
-        console.print(f"  [green]✓[/green] {len(video_paths)} clip(s) beschikbaar")
+            raise RuntimeError(
+                "Geen bruikbare clips gevonden. Controleer of de YouTube-link klopt "
+                "en of de video publiek beschikbaar is."
+            )
+        _log(f"  ✓ {len(video_paths)} clip(s) gedownload")
 
         # ── Stap 2: clips bewerken ────────────────────────────────────
-        console.print("\n[bold]Stap 2:[/bold] Effecten en overlays toepassen...")
+        _log("Stap 2: Effecten en overlays toepassen...")
         edited = []
         for i, path in enumerate(video_paths):
-            console.print(f"  Bewerken [{i + 1}/{len(video_paths)}]: {path.name}")
+            _log(f"  Bewerken [{i + 1}/{len(video_paths)}]: {path.name}")
             is_last = i == len(video_paths) - 1
             try:
                 clip = build_clip(
@@ -110,13 +108,13 @@ class FootballShortsGenerator:
                 )
                 edited.append(clip)
             except Exception as exc:
-                console.print(f"  [red]✗[/red] Clip {i + 1} mislukt: {exc}")
+                _log(f"  ✗ Clip {i + 1} mislukt: {exc}")
 
         if not edited:
             raise RuntimeError("Geen clips konden worden bewerkt.")
 
         # ── Stap 3: samenvoegen en exporteren ─────────────────────────
-        console.print("\n[bold]Stap 3:[/bold] Clips samenvoegen en exporteren...")
+        _log("Stap 3: Clips samenvoegen en exporteren...")
         slug = (player_name or "short").replace(" ", "_")
         out_name = f"{template}_{slug}_{timestamp}.mp4"
         output_path = self.output_dir / out_name
@@ -142,7 +140,7 @@ class FootballShortsGenerator:
 
         # ── Stap 4: thumbnail ─────────────────────────────────────────
         if add_thumbnail:
-            console.print("\n[bold]Stap 4:[/bold] Thumbnail maken...")
+            _log("Stap 4: Thumbnail maken...")
             thumb_path = output_path.with_suffix(".jpg")
             try:
                 frame = extract_thumbnail_frame(output_path, t=2.0)
@@ -152,17 +150,11 @@ class FootballShortsGenerator:
                     output_path=thumb_path,
                     accent=self.config["text"]["accent_color"],
                 )
-                console.print(f"  [green]✓[/green] Thumbnail: {thumb_path.name}")
+                _log(f"  ✓ Thumbnail: {thumb_path.name}")
             except Exception as exc:
-                console.print(f"  [yellow]⚠[/yellow] Thumbnail mislukt: {exc}")
+                _log(f"  ⚠ Thumbnail mislukt: {exc}")
 
-        console.print(Panel(
-            f"[bold green]✓ Short klaar![/bold green]\n"
-            f"Bestand : [cyan]{output_path}[/cyan]\n"
-            f"Formaat : [cyan]1080×1920 (9:16)[/cyan]  |  "
-            f"Max duur : [cyan]{self.config['output']['max_duration']}s[/cyan]",
-            border_style="green",
-        ))
+        _log(f"✓ Short klaar! {output_path.name} (1080×1920, max {self.config['output']['max_duration']}s)")
         return output_path
 
     # ------------------------------------------------------------------
@@ -182,7 +174,7 @@ class FootballShortsGenerator:
         results = []
         for i in range(0, len(all_urls), clips_per_short):
             batch = all_urls[i:i + clips_per_short]
-            console.print(f"\n[bold magenta]═══ Short {i // clips_per_short + 1} ═══[/bold magenta]")
+            _log(f"\n=== Short {i // clips_per_short + 1} ===")
             try:
                 path = self.generate_short(
                     sources=batch,
@@ -192,7 +184,7 @@ class FootballShortsGenerator:
                 )
                 results.append(path)
             except Exception as exc:
-                console.print(f"[red]Short mislukt:[/red] {exc}")
+                _log(f"Short mislukt: {exc}")
         return results
 
     # ------------------------------------------------------------------

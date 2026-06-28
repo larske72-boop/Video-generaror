@@ -4,10 +4,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from rich.console import Console
-
-console = Console()
-
 
 def _ydl_base_args(quality: str, merge_format: str, output_template: str) -> list[str]:
     return [
@@ -34,18 +30,20 @@ def download_clip(
     template = str(dest_dir / f"{filename}.%(ext)s")
 
     args = _ydl_base_args(quality, merge_format, template)
-    if max_duration:
-        args += ["--match-filter", f"duration <= {max_duration}"]
     args.append(url)
 
-    console.print(f"  [cyan]Downloaden:[/cyan] {url}")
+    print(f"  Downloaden: {url}", flush=True)
     result = subprocess.run(args, capture_output=True, text=True)
 
     if result.returncode != 0:
         msg = result.stderr.strip() or result.stdout.strip()
         raise RuntimeError(f"Download mislukt voor {url}:\n{msg}")
 
-    return sorted(dest_dir.glob("*.mp4")) + sorted(dest_dir.glob("*.webm"))
+    found = sorted(dest_dir.glob("*.mp4")) + sorted(dest_dir.glob("*.webm")) + sorted(dest_dir.glob("*.mkv"))
+    if not found:
+        msg = result.stderr.strip() or result.stdout.strip() or "Onbekende fout (video mogelijk privé of niet beschikbaar)"
+        raise RuntimeError(f"Download mislukt voor {url}:\n{msg}")
+    return found
 
 
 def download_clips(
@@ -68,9 +66,9 @@ def download_clips(
                 max_duration=max_duration,
             )
             all_paths.extend(paths)
-            console.print(f"  [green]✓[/green] Download {i + 1}/{len(urls)} klaar")
+            print(f"  ✓ Download {i + 1}/{len(urls)} klaar", flush=True)
         except RuntimeError as e:
-            console.print(f"  [red]✗[/red] URL {i + 1} mislukt: {e}")
+            print(f"  ✗ URL {i + 1} mislukt: {e}", flush=True)
 
     return all_paths
 
