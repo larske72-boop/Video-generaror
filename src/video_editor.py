@@ -4,6 +4,18 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+# Configureer MoviePy om de ingebouwde imageio-ffmpeg binary te gebruiken
+# zodat er geen systeem-ffmpeg in PATH nodig is.
+try:
+    import imageio_ffmpeg
+    _ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    if _ffmpeg_exe:
+        import moviepy.config as _mp_cfg
+        _mp_cfg.FFMPEG_BINARY = _ffmpeg_exe
+except Exception:
+    pass
+
 from moviepy.editor import (
     AudioFileClip,
     ColorClip,

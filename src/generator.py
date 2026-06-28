@@ -108,10 +108,12 @@ class FootballShortsGenerator:
                 )
                 edited.append(clip)
             except Exception as exc:
+                import traceback
                 _log(f"  ✗ Clip {i + 1} mislukt: {exc}")
+                _log(traceback.format_exc())
 
         if not edited:
-            raise RuntimeError("Geen clips konden worden bewerkt.")
+            raise RuntimeError("Geen clips konden worden bewerkt — zie log hierboven voor details.")
 
         # ── Stap 3: samenvoegen en exporteren ─────────────────────────
         _log("Stap 3: Clips samenvoegen en exporteren...")
