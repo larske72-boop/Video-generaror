@@ -12,7 +12,8 @@ from flask import Flask, jsonify, render_template, request, send_file
 
 app = Flask(__name__)
 JOBS: dict[str, dict] = {}
-OUTPUT_DIR = Path("output")
+# Absoluut pad zodat relatieve paden overal werken
+OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 

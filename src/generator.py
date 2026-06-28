@@ -35,7 +35,9 @@ class FootballShortsGenerator:
         output_dir: Optional[Path] = None,
     ):
         self.config = load_config(config_path)
-        self.output_dir = output_dir or Path(self.config["output"]["output_dir"])
+        raw_dir = output_dir or Path(self.config["output"]["output_dir"])
+        # Altijd absoluut pad — voorkomt problemen met werkmap
+        self.output_dir = Path(raw_dir).resolve()
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def generate_short(
