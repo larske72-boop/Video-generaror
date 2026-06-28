@@ -177,11 +177,13 @@ def concat_and_export(
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
 
-        # Concat list (forward slashes werken ook op Windows)
+        # Concat list — gebruik altijd absolute paden zodat ffmpeg ze
+        # vindt ongeacht vanuit welke map het wordt aangeroepen.
         list_path = tmp / "concat.txt"
         with open(list_path, "w", encoding="utf-8") as f:
             for p in all_clips:
-                f.write(f"file '{p.as_posix()}'\n")
+                abs_posix = Path(p).resolve().as_posix()
+                f.write(f"file '{abs_posix}'\n")
 
         # Stap 1: Concat alle video clips naar tussenbestand
         concat_tmp = tmp / "concat_raw.mp4"
