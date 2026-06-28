@@ -1,29 +1,52 @@
 @echo off
 title Football Shorts Generator
+color 0A
 echo.
 echo  =============================================
-echo   Football Shorts Generator - Opstarten...
+echo    Football Shorts Generator
 echo  =============================================
 echo.
 
-:: Controleer Python
+:: ── Stap 1: Python zoeken ─────────────────────────────────────────────────
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo  [FOUT] Python niet gevonden!
-    echo  Download Python via: https://python.org
-    echo  Vink "Add Python to PATH" aan tijdens installatie.
+    echo  [!] Python is niet geinstalleerd.
+    echo.
+    echo  Python wordt nu automatisch geinstalleerd via Windows...
+    echo  (Dit duurt ongeveer 2 minuten)
+    echo.
+    winget install -e --id Python.Python.3.11 --accept-package-agreements --accept-source-agreements
+    if errorlevel 1 (
+        echo.
+        echo  Automatisch installeren mislukt.
+        echo  Ga naar https://python.org en klik op "Download Python"
+        echo  Vink onderaan het installatiescherm "Add Python to PATH" aan!
+        echo.
+        start https://www.python.org/downloads/
+        pause
+        exit /b
+    )
+    echo.
+    echo  Python geinstalleerd! Herstart dit bestand nu opnieuw.
     pause
     exit /b
 )
 
-:: Installeer dependencies als die er nog niet zijn
-echo  Benodigde onderdelen installeren...
-pip install flask yt-dlp moviepy Pillow numpy imageio imageio-ffmpeg --quiet
-
-:: Start de app
+echo  [OK] Python gevonden.
 echo.
-echo  App wordt gestart, browser opent automatisch...
-echo  Op iPhone: open http://JOUW-IP:5000
+
+:: ── Stap 2: Packages installeren ──────────────────────────────────────────
+echo  Benodigde onderdelen worden geinstalleerd (eenmalig, ~2 min)...
+pip install flask yt-dlp moviepy==1.0.3 Pillow numpy imageio imageio-ffmpeg python-dotenv pyyaml --quiet --no-warn-script-location
+echo  [OK] Alles geinstalleerd.
+echo.
+
+:: ── Stap 3: App starten ───────────────────────────────────────────────────
+echo  App wordt gestart...
+echo  Browser opent automatisch op http://localhost:5000
+echo.
+echo  Laat dit venster open zolang je de app gebruikt.
+echo  Sluit het venster om de app te stoppen.
 echo.
 python app.py
 pause
