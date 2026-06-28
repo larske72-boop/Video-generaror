@@ -81,7 +81,14 @@ def process_clip(
     Trim clip, crop naar 9:16 (1080×1920), voeg overlays toe.
     Output is video-only MP4 (geen audio — muziek wordt bij concat toegevoegd).
     """
-    from .overlays import make_player_bar, make_watermark, make_title_overlay
+    from .overlays import make_player_bar, make_watermark, make_title_overlay, make_arrow_indicator
+
+    # Arrow indicator hoogte / breedte
+    ARROW_W, ARROW_H = 80, 120
+    # Pijltip op 52% van de framehoogte (speler zit meestal in de onderste helft)
+    ARROW_TIP_Y = int(TARGET_H * 0.52)
+    ARROW_BASE_Y = ARROW_TIP_Y - ARROW_H       # bovenkant van de pijl-PNG
+    ARROW_X     = TARGET_W // 2 - ARROW_W // 2  # horizontaal gecentreerd
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -95,6 +102,11 @@ def process_clip(
             bar_png = tmp / "bar.png"
             _save_png(make_player_bar(player_name, club, accent=accent, primary=primary), bar_png)
 
+        arrow_png: Optional[Path] = None
+        if player_name:
+            arrow_png = tmp / "arrow.png"
+            _save_png(make_arrow_indicator(ARROW_W, ARROW_H, accent=accent), arrow_png)
+
         title_png: Optional[Path] = None
         if show_title and title:
             title_png = tmp / "title.png"
@@ -102,13 +114,19 @@ def process_clip(
 
         # ── Input argumenten opbouwen ──────────────────────────────────
         inputs = ["-t", str(trim_sec), "-i", str(input_path), "-i", str(wm_png)]
-        bar_idx: Optional[int] = None
+        bar_idx:   Optional[int] = None
+        arrow_idx: Optional[int] = None
         title_idx: Optional[int] = None
         next_idx = 2
 
         if bar_png:
             inputs += ["-i", str(bar_png)]
             bar_idx = next_idx
+            next_idx += 1
+
+        if arrow_png:
+            inputs += ["-i", str(arrow_png)]
+            arrow_idx = next_idx
             next_idx += 1
 
         if title_png:
@@ -127,13 +145,21 @@ def process_clip(
         fc += f";[{cur}][1:v]overlay=0:0[ov1]"
         cur = "ov1"
 
-        # Spelersbalk: gepositioneerd 150px vanaf onderkant
+        # Spelersbalk onderaan
         if bar_idx is not None:
             lbl = f"ov{bar_idx}"
             fc += f";[{cur}][{bar_idx}:v]overlay=0:{TARGET_H - 150}[{lbl}]"
             cur = lbl
 
-        # Titel overlay: volledig frame eroverheen
+        # Bobbend pijltje boven speler (sinus-animatie via ffmpeg overlay)
+        if arrow_idx is not None:
+            lbl = f"ov{arrow_idx}"
+            # y bobs ±15px met een sinus op 1.5 Hz
+            bob = f"{ARROW_BASE_Y}+15*sin(2*PI*1.5*t)"
+            fc += f";[{cur}][{arrow_idx}:v]overlay=x={ARROW_X}:y={bob}[{lbl}]"
+            cur = lbl
+
+        # Titel overlay
         if title_idx is not None:
             lbl = f"ov{title_idx}"
             fc += f";[{cur}][{title_idx}:v]overlay=0:0[{lbl}]"

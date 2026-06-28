@@ -229,6 +229,38 @@ def make_intro_frame(
 # Thumbnail
 # ---------------------------------------------------------------------------
 
+def make_arrow_indicator(
+    width: int = 80,
+    height: int = 120,
+    accent: str = "#FFD700",
+) -> np.ndarray:
+    """Neerwaarts pijltje boven de speler — geanimeerd in ffmpeg."""
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    cx = width // 2
+
+    # Schaduw
+    shadow = (0, 0, 0, 140)
+    stem_top, stem_bottom = 4, int(height * 0.52)
+    hw = 5
+    draw.rectangle([(cx - hw + 2, stem_top + 2), (cx + hw + 2, stem_bottom + 2)], fill=shadow)
+    draw.polygon([
+        (cx - 30 + 2, stem_bottom + 2),
+        (cx + 30 + 2, stem_bottom + 2),
+        (cx + 2, height - 4 + 2),
+    ], fill=shadow)
+
+    # Pijl
+    draw.rectangle([(cx - hw, stem_top), (cx + hw, stem_bottom)], fill=accent)
+    draw.polygon([
+        (cx - 30, stem_bottom),
+        (cx + 30, stem_bottom),
+        (cx, height - 4),
+    ], fill=accent)
+
+    return np.array(img)
+
+
 def make_thumbnail(
     frame: np.ndarray,
     title: str,

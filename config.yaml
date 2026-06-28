@@ -5,7 +5,7 @@ output:
   width: 1080
   height: 1920          # 9:16 vertical voor YouTube Shorts
   fps: 30
-  max_duration: 59      # YouTube Shorts max seconden
+  max_duration: 30      # 15–30 seconden (ideaal voor Shorts)
   output_dir: ./output
   crf: 23               # Videokwaliteit (lager = beter, 18-28)
 
