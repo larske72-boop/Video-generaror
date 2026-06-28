@@ -1,68 +1,65 @@
 # ⚽ Football Shorts Generator
 
-Maak automatisch virale voetbal YouTube Shorts met AI — vergelijkbaar met kanalen zoals [@nanifoty](https://youtube.com/@nanifoty).
+Maak automatisch virale voetbal YouTube Shorts — zonder externe AI-API.  
+Geef lokale videobestanden of YouTube-links op, en de generator doet de rest.
 
-## Wat genereert het?
-
-| Template | Beschrijving |
-|---|---|
-| `goal_celebration` | Doelpunt vieringen in slow motion met flash |
-| `skill_move` | Technische vaardigheden (elastico, rainbow, etc.) |
-| `match_highlights` | Wedstrijd hoogtepunten compilatie |
-| `player_spotlight` | Spotlight video van een specifieke speler |
-| `save_of_the_day` | Spectaculaire keepersreddingen |
-| `top_skills` | Top 5/10 skills compilatie |
-
-**Output:** 1080×1920 MP4 (9:16) klaar voor YouTube Shorts, max 59 seconden.
+**Output:** 1080×1920 MP4 (9:16) + thumbnail, klaar voor YouTube Shorts.
 
 ---
 
 ## Installatie
 
 ```bash
-# 1. Clone het project
-git clone <repo-url>
-cd Video-generaror
-
-# 2. Installeer dependencies
+# Dependencies installeren
 pip install -r requirements.txt
 
-# 3. Stel je Higgsfield API key in
-cp .env.example .env
-# Bewerk .env en vul je HIGGSFIELD_API_KEY in
+# ffmpeg is ook vereist (voor video verwerking):
+# Ubuntu/Debian:  sudo apt install ffmpeg
+# macOS:          brew install ffmpeg
+# Windows:        https://ffmpeg.org/download.html
 ```
-
-Je hebt een **Higgsfield API key** nodig: maak een account aan op [higgsfield.ai](https://higgsfield.ai).
 
 ---
 
 ## Gebruik
 
-### Enkelvoudige short genereren
+### Van lokale bestanden
 
 ```bash
-# Basis — doelpunt viering
-python main.py generate --template goal_celebration
-
-# Met spelersnaam en club
-python main.py generate --template goal_celebration --player "Messi" --club "Inter Miami"
-
-# Skill move van Ronaldo
-python main.py generate --template skill_move --player "Ronaldo" --club "Al-Nassr"
-
-# Eigen prompt
-python main.py generate --template skill_move --prompt "Neymar rainbow flick over two defenders, slow motion"
-
-# Keeper van de dag
-python main.py generate --template save_of_the_day --player "De Gea"
+python main.py generate clip1.mp4 clip2.mp4 \
+  --template goal_celebration \
+  --player "Messi" \
+  --club "Inter Miami" \
+  --music assets/music/hype.mp3
 ```
 
-### Batch generatie
+### Van YouTube-URLs (automatisch downloaden)
 
 ```bash
-# 5 shorts van verschillende spelers
-python main.py batch --template goal_celebration --count 5 \
-  --players "Messi,Ronaldo,Mbappe,Haaland,Vinicius"
+python main.py generate "https://youtu.be/..." \
+  --template skill_move \
+  --player "Neymar" \
+  --club "Al-Hilal"
+```
+
+### Combinatie van lokaal + URL
+
+```bash
+python main.py generate clip_intro.mp4 "https://youtu.be/..." clip_outro.mp4 \
+  --template match_highlights \
+  --team-a "PSG" --score-a 3 \
+  --team-b "Real Madrid" --score-b 1
+```
+
+### Batch — meerdere shorts van een URL-lijst
+
+```bash
+# urls.txt: één YouTube-URL per regel, # = commentaar
+python main.py batch urls_example.txt \
+  --template goal_celebration \
+  --clips-per-short 3 \
+  --player "Haaland" \
+  --music assets/music/epic.mp3
 ```
 
 ### Alle templates bekijken
@@ -71,58 +68,47 @@ python main.py batch --template goal_celebration --count 5 \
 python main.py list-templates
 ```
 
-### Credit saldo controleren
+---
 
-```bash
-python main.py check-balance
-```
+## Templates
+
+| Template | Beschrijving | Slow-Mo | Flash |
+|---|---|:---:|:---:|
+| `goal_celebration` | Doelpunt vieringen | ✓ | ✓ |
+| `skill_move` | Skills (elastico, rainbow, etc.) | ✓ | |
+| `match_highlights` | Wedstrijdcompilatie + scorebord | | |
+| `player_spotlight` | Spotlight van één speler | ✓ | |
+| `save_of_the_day` | Keepersreddingen | ✓ | ✓ |
+| `top_skills` | Skills compilatie | | |
+
+---
+
+## Muziek toevoegen
+
+Zet royalty-free MP3/WAV-bestanden in `assets/music/` en geef het pad mee via `--music`.
+
+Gratis bronnen:
+- [YouTube Audio Library](https://studio.youtube.com/channel/music)
+- [Pixabay Music](https://pixabay.com/music/)
+- [Free Music Archive](https://freemusicarchive.org/)
 
 ---
 
 ## Configuratie
 
-Pas `config.yaml` aan voor eigen instellingen:
+Pas `config.yaml` aan voor eigen branding en instellingen:
 
 ```yaml
 branding:
-  channel_name: "JOUW KANAAL"  # Watermark op video's
+  channel_name: "JOUW KANAAL"     # Watermark tekst op elke clip
 
-higgsfield:
-  default_model: "kling3_0"    # AI video model
-  clip_duration: 5             # Seconden per clip
+text:
+  accent_color: "#FFD700"         # Goud — pas aan naar je huisstijl
 
-output:
-  max_duration: 59             # Max duur YouTube Short
-  fps: 30
+effects:
+  slow_motion_factor: 0.5         # 0.5 = halve snelheid
+  zoom_scale: 1.12                # Zoom-in factor (Ken-Burns)
 ```
-
----
-
-## Hoe het werkt
-
-```
-Jij kiest template + speler
-        ↓
-AI genereert voetbal clips (Higgsfield kling3_0)
-        ↓
-Effecten: slow motion, zoom, flash
-        ↓
-Overlays: spelersnaam, titel, watermark
-        ↓
-Clips samenvoegen + fade overgangen
-        ↓
-Export: 1080×1920 MP4 + thumbnail JPG
-```
-
----
-
-## Tips voor virale Shorts (nanifoty-stijl)
-
-1. **Gebruik echte spelersnamen** in de prompt voor betere resultaten
-2. **goal_celebration + slow_motion** werkt het beste voor engagement
-3. **Genereer 3-5 clips** per short voor de juiste lengte (30-45s)
-4. Upload op tijden dat je doelgroep online is (avond, weekend)
-5. Gebruik de gegenereerde thumbnail — hij is al geoptimaliseerd voor clicks
 
 ---
 
@@ -130,14 +116,44 @@ Export: 1080×1920 MP4 + thumbnail JPG
 
 ```
 Video-generaror/
-├── main.py              # CLI entry point
-├── config.yaml          # Configuratie
+├── main.py                  ← CLI
+├── config.yaml              ← Instellingen
 ├── requirements.txt
-├── .env                 # Jouw API keys (niet in git)
+├── urls_example.txt         ← Voorbeeld URL-batch bestand
 ├── src/
-│   ├── generator.py     # Hoofd pipeline
-│   ├── higgsfield_client.py  # Higgsfield REST API
-│   ├── video_editor.py  # ffmpeg/MoviePy bewerking
-│   └── prompts.py       # AI prompt templates
-└── output/              # Gegenereerde videos
+│   ├── generator.py         ← Hoofd pipeline
+│   ├── downloader.py        ← yt-dlp clip downloader
+│   ├── video_editor.py      ← MoviePy effecten + export
+│   └── overlays.py          ← PIL tekst / branding overlays
+├── assets/
+│   └── music/               ← Zet hier jouw muziekbestanden
+└── output/                  ← Gegenereerde videos komen hier
+```
+
+---
+
+## Hoe het werkt
+
+```
+Jij geeft clips of YouTube-links op
+           ↓
+yt-dlp downloadt de clips (indien URL)
+           ↓
+Clips worden bewerkt:
+  • 9:16 crop (cover mode)
+  • Slow motion (indien actief)
+  • Ken-Burns zoom
+  • Flash effect bij doelpunten
+           ↓
+Overlays worden toegevoegd:
+  • Spelersnaam + club balk
+  • Titel + emoji
+  • Kanaal watermark
+  • Score badge (bij match_highlights)
+           ↓
+Clips samenvoegen met fades + kanaalintro
+           ↓
+Achtergrondmuziek mixen
+           ↓
+Export: 1080×1920 MP4 + thumbnail JPG
 ```

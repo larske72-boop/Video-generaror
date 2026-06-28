@@ -1,251 +1,236 @@
-"""Video bewerkingspipeline met MoviePy + PIL voor football shorts."""
+"""Video bewerkingspipeline: effecten, overlays en export via MoviePy."""
 
-import random
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import (
-    VideoFileClip,
-    ImageClip,
-    TextClip,
-    CompositeVideoClip,
-    concatenate_videoclips,
     AudioFileClip,
     ColorClip,
+    CompositeVideoClip,
+    ImageClip,
+    VideoFileClip,
+    concatenate_audioclips,
+    concatenate_videoclips,
 )
 from moviepy.video.fx import fadein, fadeout
-from rich.console import Console
 
-console = Console()
+from .overlays import (
+    make_intro_frame,
+    make_player_bar,
+    make_score_badge,
+    make_thumbnail,
+    make_title_overlay,
+    make_watermark,
+    TARGET_H,
+    TARGET_W,
+)
 
-TARGET_W, TARGET_H = 1080, 1920  # 9:16 vertical
+# ---------------------------------------------------------------------------
+# Clip helpers
+# ---------------------------------------------------------------------------
 
 
-def _fit_clip(clip: VideoFileClip, target_w: int = TARGET_W, target_h: int = TARGET_H) -> VideoFileClip:
-    """Schaal en crop clip naar doelresolutie (cover mode)."""
+def fit_to_vertical(clip: VideoFileClip) -> VideoFileClip:
+    """Schaal en crop een clip naar 1080×1920 (9:16) via cover mode."""
     w, h = clip.size
-    scale = max(target_w / w, target_h / h)
+    scale = max(TARGET_W / w, TARGET_H / h)
     clip = clip.resize(scale)
-    x1 = (clip.w - target_w) // 2
-    y1 = (clip.h - target_h) // 2
-    return clip.crop(x1=x1, y1=y1, width=target_w, height=target_h)
+    x1 = (clip.w - TARGET_W) // 2
+    y1 = (clip.h - TARGET_H) // 2
+    return clip.crop(x1=x1, y1=y1, width=TARGET_W, height=TARGET_H)
 
 
-def _slow_motion(clip: VideoFileClip, factor: float = 0.5) -> VideoFileClip:
-    """Pas slow motion toe door tijdsnelheid te halveren."""
-    return clip.fx(lambda c: c.fl_time(lambda t: t * factor)).set_duration(clip.duration / factor)
+def apply_slow_motion(clip: VideoFileClip, factor: float = 0.5) -> VideoFileClip:
+    """Slow-motion door tijdsfactor toe te passen."""
+    new_dur = clip.duration / factor
+    return clip.fl_time(lambda t: t * factor, apply_to=["mask"]).set_duration(new_dur)
 
 
-def _zoom_effect(clip: VideoFileClip, scale_start: float = 1.0, scale_end: float = 1.12) -> VideoFileClip:
-    """Ken-Burns stijl langzame zoom in/uit."""
+def apply_zoom(clip: VideoFileClip, scale_start: float = 1.0, scale_end: float = 1.12) -> VideoFileClip:
+    """Ken-Burns stijl langzame zoom."""
     def zoom(t):
-        factor = scale_start + (scale_end - scale_start) * (t / clip.duration)
-        return factor
-
-    return clip.resize(lambda t: zoom(t))
+        return scale_start + (scale_end - scale_start) * (t / max(clip.duration, 0.001))
+    return clip.resize(zoom)
 
 
-def _flash_overlay(duration: float = 0.15) -> ImageClip:
-    """Witte flash overlay van korte duur."""
-    return ColorClip(size=(TARGET_W, TARGET_H), color=(255, 255, 255)).set_duration(duration).set_opacity(0.85)
-
-
-def _make_title_frame(
-    text: str,
-    subtitle: str = "",
-    width: int = TARGET_W,
-    height: int = TARGET_H,
-    bg_alpha: int = 0,
-) -> np.ndarray:
-    """Render tekst op transparante achtergrond via PIL, geeft numpy array terug."""
-    img = Image.new("RGBA", (width, height), (0, 0, 0, bg_alpha))
-    draw = ImageDraw.Draw(img)
-
-    # Probeer een systeem lettertype te laden
-    font_large = _load_font(80)
-    font_small = _load_font(48)
-
-    # Hoofdtekst met schaduw
-    _draw_text_shadow(draw, text, width // 2, height - 280, font_large, fill="#FFD700", shadow="#000000")
-    if subtitle:
-        _draw_text_shadow(draw, subtitle, width // 2, height - 180, font_small, fill="#FFFFFF", shadow="#000000")
-
-    return np.array(img)
-
-
-def _load_font(size: int) -> ImageFont.FreeTypeFont:
-    """Laad een vet lettertype als dat beschikbaar is."""
-    candidates = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
-        "/System/Library/Fonts/Supplemental/Impact.ttf",
-        "Impact.ttf",
-    ]
-    for path in candidates:
-        try:
-            return ImageFont.truetype(path, size)
-        except (OSError, IOError):
-            continue
-    return ImageFont.load_default()
-
-
-def _draw_text_shadow(
-    draw: ImageDraw.Draw,
-    text: str,
-    cx: int,
-    cy: int,
-    font: ImageFont.FreeTypeFont,
-    fill: str = "#FFD700",
-    shadow: str = "#000000",
-    stroke_width: int = 3,
-) -> None:
-    """Teken tekst gecentreerd met schaduwrand."""
-    bbox = draw.textbbox((0, 0), text, font=font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
-    x = cx - tw // 2
-    y = cy - th // 2
-
-    # Schaduw
-    for dx in range(-stroke_width, stroke_width + 1):
-        for dy in range(-stroke_width, stroke_width + 1):
-            if dx != 0 or dy != 0:
-                draw.text((x + dx, y + dy), text, font=font, fill=shadow)
-    # Hoofdtekst
-    draw.text((x, y), text, font=font, fill=fill)
-
-
-def _make_player_label(player_name: str, club: str = "", width: int = TARGET_W) -> np.ndarray:
-    """Maak een spelersnaam label onderaan in beeld."""
-    height = 160
-    img = Image.new("RGBA", (width, height), (0, 0, 0, 160))
-    draw = ImageDraw.Draw(img)
-    font_name = _load_font(56)
-    font_club = _load_font(36)
-    _draw_text_shadow(draw, player_name.upper(), width // 2, 55, font_name, fill="#FFFFFF")
-    if club:
-        _draw_text_shadow(draw, club, width // 2, 120, font_club, fill="#FFD700")
-    return np.array(img)
-
-
-def _make_watermark(channel_name: str, width: int = TARGET_W) -> np.ndarray:
-    """Maak een klein kanaallogo linksboven."""
-    height = 70
-    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    font = _load_font(36)
-    _draw_text_shadow(draw, f"@{channel_name}", 20 + 120, 35, font, fill="#FFD700")
-    return np.array(img)
+def make_flash(duration: float = 0.18) -> ColorClip:
+    """Witte flash overlay."""
+    return (
+        ColorClip(size=(TARGET_W, TARGET_H), color=(255, 255, 255))
+        .set_duration(duration)
+        .set_opacity(0.85)
+    )
 
 
 # ---------------------------------------------------------------------------
-# Hoofd bewerkingsfuncties
+# Clip samenstellen
 # ---------------------------------------------------------------------------
 
-def create_clip_with_overlays(
+
+def build_clip(
     video_path: Path,
-    title: str,
-    subtitle: str = "",
+    template_cfg: dict,
+    global_cfg: dict,
     player_name: str = "",
     club: str = "",
     channel_name: str = "FOOTBALLSHORTS",
-    slow_mo: bool = False,
-    zoom: bool = True,
-    flash: bool = False,
-    max_duration: float = 8.0,
+    show_title: bool = False,
+    title: str = "",
+    subtitle: str = "",
+    show_score: bool = False,
+    team_a: str = "",
+    score_a: int = 0,
+    score_b: int = 0,
+    team_b: str = "",
 ) -> VideoFileClip:
-    """Laad een clip, pas effecten toe en voeg overlays toe."""
+    """Laad clip, pas effecten toe en voeg overlays toe. Geeft CompositeVideoClip."""
+
     clip = VideoFileClip(str(video_path))
-    clip = _fit_clip(clip)
+    clip = fit_to_vertical(clip)
 
-    # Duur begrenzen
-    if clip.duration > max_duration:
-        clip = clip.subclip(0, max_duration)
+    # Trim
+    max_sec = template_cfg.get("clip_trim", 8)
+    if clip.duration > max_sec:
+        clip = clip.subclip(0, max_sec)
 
-    # Slow motion
-    if slow_mo:
-        clip = _slow_motion(clip, factor=0.5)
+    # Effecten
+    if template_cfg.get("slow_motion"):
+        factor = global_cfg["effects"]["slow_motion_factor"]
+        clip = apply_slow_motion(clip, factor)
 
-    # Zoom-in effect
-    if zoom:
-        clip = _zoom_effect(clip)
+    if template_cfg.get("zoom"):
+        clip = apply_zoom(clip, scale_end=global_cfg["effects"]["zoom_scale"])
 
     layers = [clip]
 
-    # Spelersnaam overlay onderaan
-    if player_name:
-        label_arr = _make_player_label(player_name, club)
-        label = (
-            ImageClip(label_arr, ismask=False)
+    # Score badge
+    if show_score and team_a and team_b:
+        badge_arr = make_score_badge(team_a, score_a, score_b, team_b)
+        badge = (
+            ImageClip(badge_arr, ismask=False)
             .set_duration(clip.duration)
-            .set_position(("center", TARGET_H - 160))
+            .set_position(("center", 0))
         )
-        layers.append(label)
+        layers.append(badge)
 
-    # Titel overlay
-    if title:
-        title_arr = _make_title_frame(title, subtitle)
+    # Spelersnaam balk
+    if player_name:
+        bar_arr = make_player_bar(
+            player_name,
+            club,
+            accent=global_cfg["text"]["accent_color"],
+            primary=global_cfg["text"]["primary_color"],
+        )
+        bar = (
+            ImageClip(bar_arr, ismask=False)
+            .set_duration(clip.duration)
+            .set_position(("center", TARGET_H - 150))
+        )
+        layers.append(bar)
+
+    # Titel overlay (alleen laatste clip of als gevraagd)
+    if show_title and title:
+        pos = template_cfg.get("text_position", "bottom")
+        title_arr = make_title_overlay(
+            title,
+            subtitle=subtitle,
+            position=pos,
+            accent=global_cfg["text"]["accent_color"],
+            primary=global_cfg["text"]["primary_color"],
+        )
+        show_dur = min(3.5, clip.duration)
         title_clip = (
             ImageClip(title_arr, ismask=False)
-            .set_duration(min(3.0, clip.duration))
-            .set_start(max(0, clip.duration - 3.5))
+            .set_duration(show_dur)
+            .set_start(max(0, clip.duration - show_dur))
+            .crossfadein(0.3)
         )
         layers.append(title_clip)
 
     # Watermark
-    wm_arr = _make_watermark(channel_name)
+    wm_arr = make_watermark(
+        channel_name,
+        position=global_cfg["branding"]["watermark_position"],
+        accent=global_cfg["text"]["accent_color"],
+    )
     wm = (
         ImageClip(wm_arr, ismask=False)
         .set_duration(clip.duration)
-        .set_position((10, 40))
     )
     layers.append(wm)
 
     composed = CompositeVideoClip(layers, size=(TARGET_W, TARGET_H))
 
-    # Flash effect aan het begin
-    if flash:
-        flash_clip = _flash_overlay(0.2).set_start(0)
-        composed = CompositeVideoClip([composed, flash_clip], size=(TARGET_W, TARGET_H))
+    # Flash effect
+    if template_cfg.get("flash"):
+        flash_dur = global_cfg["effects"]["flash_duration"]
+        flash = make_flash(flash_dur)
+        composed = CompositeVideoClip([composed, flash], size=(TARGET_W, TARGET_H))
 
     return composed.set_duration(clip.duration)
 
 
-def build_short(
-    clips: list[VideoFileClip],
+# ---------------------------------------------------------------------------
+# Intro frame
+# ---------------------------------------------------------------------------
+
+
+def make_intro_clip(channel_name: str, duration: float = 1.5) -> ImageClip:
+    """Zwart intro met kanaalbranding."""
+    frame = make_intro_frame(channel_name)
+    return (
+        ImageClip(frame, ismask=False)
+        .set_duration(duration)
+        .fx(fadeout.fadeout, 0.4)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Samenvoegen en exporteren
+# ---------------------------------------------------------------------------
+
+
+def combine_and_export(
+    clips: list,
     output_path: Path,
     audio_path: Optional[Path] = None,
+    music_volume: float = 0.20,
     max_duration: float = 59.0,
     fps: int = 30,
+    crf: int = 23,
+    fade_duration: float = 0.25,
+    include_intro: bool = True,
+    channel_name: str = "FOOTBALLSHORTS",
 ) -> Path:
-    """Combineer clips tot een YouTube Short en exporteer als MP4."""
+    """Voeg clips samen met fades, voeg muziek toe en exporteer als MP4."""
     if not clips:
-        raise ValueError("Geen clips om te combineren")
+        raise ValueError("Geen clips om samen te voegen.")
 
-    # Clips samenvoegen met fade overgang
+    # Fade in/out per clip
     faded = []
-    for i, c in enumerate(clips):
-        c = fadein.fadein(c, 0.2)
-        c = fadeout.fadeout(c, 0.2)
+    for c in clips:
+        c = fadein.fadein(c, fade_duration)
+        c = fadeout.fadeout(c, fade_duration)
         faded.append(c)
+
+    # Intro prependen
+    if include_intro:
+        intro = make_intro_clip(channel_name, duration=1.5)
+        faded = [intro] + faded
 
     final = concatenate_videoclips(faded, method="compose")
 
-    # Duur beperken
     if final.duration > max_duration:
         final = final.subclip(0, max_duration)
 
-    # Achtergrondmuziek toevoegen als die beschikbaar is
+    # Achtergrondmuziek
     if audio_path and audio_path.exists():
-        music = AudioFileClip(str(audio_path)).volumex(0.25)
+        music = AudioFileClip(str(audio_path)).volumex(music_volume)
         if music.duration < final.duration:
-            loops = int(final.duration / music.duration) + 1
-            from moviepy.editor import concatenate_audioclips
-            music = concatenate_audioclips([music] * loops)
-        music = music.subclip(0, final.duration)
+            reps = int(final.duration / music.duration) + 1
+            music = concatenate_audioclips([music] * reps)
+        music = music.subclip(0, final.duration).audio_fadeout(1.5)
         final = final.set_audio(music)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -255,38 +240,17 @@ def build_short(
         codec="libx264",
         audio_codec="aac",
         preset="fast",
-        ffmpeg_params=["-crf", "23"],
+        ffmpeg_params=["-crf", str(crf)],
         logger=None,
     )
     return output_path
 
 
-def create_thumbnail(
-    video_path: Path,
-    title: str,
-    output_path: Path,
-    timestamp: float = 1.0,
-) -> Path:
-    """Trek een frame uit de video en voeg thumbnail-tekst toe."""
+def extract_thumbnail_frame(video_path: Path, t: float = 1.5) -> np.ndarray:
+    """Trek een frame op tijdstip t uit de video."""
     clip = VideoFileClip(str(video_path))
-    clip = _fit_clip(clip)
-    t = min(timestamp, clip.duration - 0.1)
+    clip = fit_to_vertical(clip)
+    t = min(t, clip.duration - 0.1)
     frame = clip.get_frame(t)
     clip.close()
-
-    img = Image.fromarray(frame)
-
-    # Donkere gradient onderin
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    for i in range(300):
-        alpha = int(180 * (i / 300))
-        draw.rectangle([(0, img.height - 300 + i), (img.width, img.height - 300 + i + 1)], fill=(0, 0, 0, alpha))
-
-    combined = Image.alpha_composite(img.convert("RGBA"), overlay)
-    draw2 = ImageDraw.Draw(combined)
-    font = _load_font(90)
-    _draw_text_shadow(draw2, title, img.width // 2, img.height - 120, font, fill="#FFD700")
-
-    combined.convert("RGB").save(str(output_path), "JPEG", quality=95)
-    return output_path
+    return frame

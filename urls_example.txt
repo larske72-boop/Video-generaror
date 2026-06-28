@@ -1,0 +1,10 @@
+# Voorbeeld URL-bestand voor batch modus
+# Één YouTube-URL per regel — alles na # wordt genegeerd
+#
+# Gebruik:
+#   python main.py batch urls_example.txt -t goal_celebration -p "Messi" --clips-per-short 3
+#
+# Voeg hier jouw YouTube-links toe:
+https://www.youtube.com/watch?v=JOUW_VIDEO_1
+https://www.youtube.com/watch?v=JOUW_VIDEO_2
+https://www.youtube.com/watch?v=JOUW_VIDEO_3

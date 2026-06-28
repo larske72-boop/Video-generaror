@@ -2,79 +2,96 @@
 
 output:
   format: mp4
-  resolution: "1080x1920"   # 9:16 vertical voor YouTube Shorts
+  width: 1080
+  height: 1920          # 9:16 vertical voor YouTube Shorts
   fps: 30
-  max_duration: 59           # YouTube Shorts max 60 seconden
-  output_dir: "./output"
-  quality: high              # low / medium / high
+  max_duration: 59      # YouTube Shorts max seconden
+  output_dir: ./output
+  crf: 23               # Videokwaliteit (lager = beter, 18-28)
 
-higgsfield:
-  base_url: "https://api.higgsfield.ai"
-  default_model: "kling3_0"
-  image_model: "nano_banana_pro"
-  clip_duration: 5           # Seconden per AI clip
+download:
+  quality: "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
+  merge_format: mp4
+  max_clip_duration: 120  # Download maximaal 120s per clip
 
 branding:
-  channel_name: "FOOTBALL SHORTS"
-  watermark: true
-  watermark_position: "top-right"  # top-left / top-right / bottom-left / bottom-right
-  intro_duration: 2.0
-  outro_duration: 2.0
+  channel_name: "FOOTBALL SHORTS"   # Naam op je short
+  watermark_position: top-left      # top-left / top-right
+  intro_duration: 1.5               # Seconden kanaalintro
+  outro_duration: 1.5
 
-text_style:
-  title_font_size: 72
-  subtitle_font_size: 48
-  player_name_font_size: 60
+text:
+  title_size: 75
+  subtitle_size: 48
+  player_size: 60
   primary_color: "#FFFFFF"
-  accent_color: "#FFD700"    # Goud
-  shadow_color: "#000000"
+  accent_color:  "#FFD700"   # Goud
+  shadow_color:  "#000000"
   stroke_width: 3
 
 effects:
-  slow_motion_factor: 0.5    # Voor doelpunten / skills
-  zoom_in_scale: 1.15
-  transition_duration: 0.3   # Seconden
-  flash_effect: true         # Wit flash bij doelpunt
+  slow_motion_factor: 0.5    # 0.5 = halve snelheid
+  zoom_scale: 1.12           # Ken-Burns zoom
+  flash_duration: 0.18       # Witte flash bij doelpunt (seconden)
+  fade_duration: 0.25        # Fade tussen clips
 
 templates:
   goal_celebration:
-    clips: 3
+    label: "Doelpunt viering"
+    clip_trim: 8             # Max seconden per clip
     slow_motion: true
     flash: true
-    music_style: "epic"
-    text_template: "{player} GOAL! {minute}'"
+    zoom: true
+    music_volume: 0.20
+    title: "GOAL! 🔥"
+    text_position: bottom    # top / bottom
 
   skill_move:
-    clips: 2
+    label: "Technische vaardigheid"
+    clip_trim: 7
     slow_motion: true
     flash: false
-    music_style: "hype"
-    text_template: "{player} | {skill_name}"
+    zoom: true
+    music_volume: 0.22
+    title: "INSANE SKILL! 😱"
+    text_position: bottom
 
   match_highlights:
-    clips: 5
+    label: "Wedstrijd hoogtepunten"
+    clip_trim: 6
     slow_motion: false
     flash: false
-    music_style: "energetic"
-    text_template: "{team_a} {score_a}-{score_b} {team_b}"
+    zoom: false
+    music_volume: 0.18
+    title: "HIGHLIGHTS ⚽"
+    text_position: bottom
 
   player_spotlight:
-    clips: 4
+    label: "Speler spotlight"
+    clip_trim: 8
     slow_motion: true
     flash: false
-    music_style: "cinematic"
-    text_template: "{player} | {club}"
+    zoom: true
+    music_volume: 0.20
+    title: "WORLD CLASS 👑"
+    text_position: bottom
 
   save_of_the_day:
-    clips: 2
+    label: "Keeper redding"
+    clip_trim: 7
     slow_motion: true
     flash: true
-    music_style: "dramatic"
-    text_template: "SAVE! {goalkeeper}"
+    zoom: true
+    music_volume: 0.22
+    title: "IMPOSSIBLE SAVE! 🧤"
+    text_position: bottom
 
   top_skills:
-    clips: 6
+    label: "Skills compilatie"
+    clip_trim: 5
     slow_motion: false
     flash: false
-    music_style: "hype"
-    text_template: "TOP 5 SKILLS"
+    zoom: false
+    music_volume: 0.25
+    title: "TOP SKILLS 🔥"
+    text_position: bottom
